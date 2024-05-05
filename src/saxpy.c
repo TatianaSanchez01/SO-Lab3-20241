@@ -17,6 +17,7 @@
 #include <stdlib.h>
 #include <assert.h>
 #include <sys/time.h>
+#include <bits/getopt_core.h>
 
 int main(int argc, char* argv[]){
 	// Variables to obtain command line parameters
