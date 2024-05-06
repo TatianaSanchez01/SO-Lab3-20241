@@ -119,6 +119,13 @@ int main(int argc, char* argv[]){
 		printf("%f, ", Y[i]);
 	}
 	printf("%f ]\n", Y[p-1]);
+
+	printf("vector Y_avgs= [ ");
+	for (i = 0; i < p - 1; i++)
+	{
+		printf("%f, ", Y_avgs[i]);
+	}
+	printf("%f ]\n", Y_avgs[p - 1]);
 #endif
 	
 	// Computing execution time
