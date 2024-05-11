@@ -24,19 +24,40 @@
 double *X;
 double a;
 double *Y;
+double *Y_avgs;
+int i, it;
 int p = 10000000;
 int n_threads = 2;
+int max_iters = 1000;
+
+// Structure to hold thread-local data and a lock for thread safety
+typedef struct
+{
+	double *local_Y_avgs;
+	pthread_mutex_t lock;
+	double Y_avg;
+	int id;
+} thread_data_t;
 
 void *saxpy_parallel(void *arg)
 {
-	long thread_id = (long)arg;
+	thread_data_t *data = (thread_data_t *)arg;
 	int chunk_size = p / n_threads;
-	int start = thread_id * chunk_size;
-	int end = (thread_id + 1) * chunk_size;
+	int extra = p % n_threads; // Calculate the rest of the division
+	int start = data->id * chunk_size + (data->id < extra ? data->id : extra);
+	int end = start + chunk_size + (data->id < extra ? 1 : 0);
 
-	for (int i = start; i < end; i++)
+	for (int it = 0; it < max_iters; it++)
 	{
-		Y[i] = Y[i] + a * X[i];
+		for (int i = start; i < end; i++)
+		{
+			Y[i] = Y[i] + a * X[i];
+			data->local_Y_avgs[it] += Y[i];
+		}
+		pthread_mutex_lock(&data->lock);
+		data->Y_avg += data->local_Y_avgs[it];
+		pthread_mutex_unlock(&data->lock);
+		data->local_Y_avgs[it] = 0.0;
 	}
 
 	pthread_exit(NULL);
@@ -46,10 +67,7 @@ int main(int argc, char *argv[])
 {
 	// Variables to obtain command line parameters
 	unsigned int seed = 1;
-	int max_iters = 1000;
-	// Variables to perform SAXPY operation
-	double *Y_avgs;
-	int i, it;
+
 	// Variables to get execution time
 	struct timeval t_start, t_end;
 	double exec_time;
@@ -95,13 +113,23 @@ int main(int argc, char *argv[])
 	Y = (double *)malloc(sizeof(double) * p);
 	Y_avgs = (double *)malloc(sizeof(double) * max_iters);
 
+	// Allocate memory and initialize thread data
+	thread_data_t *thread_data = (thread_data_t *)malloc(sizeof(thread_data_t) * n_threads);
+	for (int i = 0; i < n_threads; i++)
+	{
+		thread_data[i].local_Y_avgs = (double *)calloc(max_iters, sizeof(double));
+		pthread_mutex_init(&thread_data[i].lock, NULL);
+		thread_data[i].Y_avg = 0.0;
+		thread_data[i].id = i;
+	}
+
 	for (i = 0; i < p; i++)
 	{
 		X[i] = (double)rand() / RAND_MAX;
 		Y[i] = (double)rand() / RAND_MAX;
 	}
 
-	for (int i = 0; i < max_iters; i++)
+	for (i = 0; i < max_iters; i++)
 	{
 		Y_avgs[i] = 0.0;
 	}
@@ -127,16 +155,15 @@ int main(int argc, char *argv[])
 #endif
 
 	/*
-	 *	Function to parallelize
+	 * Function to parallelize
 	 */
 	gettimeofday(&t_start, NULL);
-	// SAXPY iterative SAXPY mfunction
 
-	//  Create threads
+	// Create threads and pass thread data
 	pthread_t threads[n_threads];
 	for (long i = 0; i < n_threads; i++)
 	{
-		pthread_create(&threads[i], NULL, saxpy_parallel, (void *)i);
+		pthread_create(&threads[i], NULL, saxpy_parallel, (void *)&thread_data[i]);
 	}
 
 	// Wait for threads to finish
@@ -145,15 +172,16 @@ int main(int argc, char *argv[])
 		pthread_join(threads[i], NULL);
 	}
 
-	for (it = 0; it < max_iters; it++)
+	// Finalize Y_avgs by combining thread-local Y_avg values
+	for (int it = 0; it < max_iters; it++)
 	{
-		for (i = 0; i < p; i++)
+		for (int i = 0; i < n_threads; i++)
 		{
-			Y[i] = Y[i] + a * X[i];
-			Y_avgs[it] += Y[i];
+			Y_avgs[it] += thread_data[i].local_Y_avgs[it];
 		}
-		Y_avgs[it] = Y_avgs[it] / p;
+		Y_avgs[it] /= p;
 	}
+	free(thread_data); // Free thread data array
 
 	gettimeofday(&t_end, NULL);
 
@@ -166,11 +194,11 @@ int main(int argc, char *argv[])
 	printf("%f ]\n", Y[p - 1]);
 
 	printf("vector Y_avgs= [ ");
-	for (i = 0; i < p - 1; i++)
+	for (i = 0; i < max_iters - 1; i++)
 	{
 		printf("%f, ", Y_avgs[i]);
 	}
-	printf("%f ]\n", Y_avgs[p - 1]);
+	printf("%f ]\n", Y_avgs[max_iters - 1]);
 
 #endif
 
