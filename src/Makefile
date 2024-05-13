@@ -12,7 +12,9 @@ ifeq ($(DEBUG), 1)
 endif
 
 $(TARG): $(OBJS)
-	$(CC) -o $(TARG) $(OBJS) $(LIBS)
+	$(CC) -o $(TARG) $(OBJS) $(LIBS) 
+
+#-fopenmp
 
 %.o: %.c
 	$(CC) $(OPTS) -c $< -o $@
