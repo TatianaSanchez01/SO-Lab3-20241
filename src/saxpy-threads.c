@@ -57,7 +57,6 @@ void *saxpy_parallel(void *arg)
 		pthread_mutex_lock(&data->lock);
 		data->Y_avg += data->local_Y_avgs[it];
 		pthread_mutex_unlock(&data->lock);
-		data->local_Y_avgs[it] = 0.0;
 	}
 
 	pthread_exit(NULL);
